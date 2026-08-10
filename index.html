@@ -1,1 +1,190 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>Casse-briques Santé</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:#0B1220;font-family:system-ui,Segoe UI,Roboto,Arial;color:#E2E8F0}
+#app{max-width:480px;margin:0 auto;height:100dvh;display:flex;flex-direction:column;padding:8px;gap:8px}
+#top{position:relative;display:flex;align-items:center;justify-content:center;height:58px}
+#back{position:absolute;left:0;top:50%;transform:translateY(-50%);background:#2563EB;color:white;border:none;border-radius:999px;width:62px;height:62px;font-size:11px;line-height:11px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.4);z-index:10}
+#title{font-size:22px;font-weight:800;color:white;text-align:center}
+#infos{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+#infos::-webkit-scrollbar{display:none}
+.pill{background:#E2E8F0;color:#0F172A;border-radius:999px;padding:6px 11px;font-size:12px;font-weight:800;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.pill.vert{background:#16A34A;color:white}
+.pill.sombre{background:#1E293B;color:#CBD5E1}
+#viesDots{display:flex;gap:3px}
+.dot{width:7px;height:7px;border-radius:50%;background:#22C55E}
+.dot.off{background:#334155}
+.iconBtn{width:34px;height:34px;border-radius:50%;border:none;cursor:pointer;background:#1E293B;display:grid;place-items:center;font-size:16px;flex-shrink:0}
+#missionBar{background:#1E293B;border-radius:12px;padding:9px 12px;font-size:13px;line-height:1.25}
+#missionBar b.rouge{color:#EF4444}
+#progressWrap{display:flex;flex-direction:column;gap:4px}
+#track{height:8px;background:#1E293B;border-radius:999px;overflow:hidden}
+#fill{height:100%;width:0%;background:#22C55E;transition:width.2s}
+#progLabels{display:flex;justify-content:space-between;font-size:11px;color:#94A3B8}
+#gameWrap{flex:1;min-height:0;position:relative;border-radius:18px;overflow:hidden;background:#000;touch-action:none;overscroll-behavior:none}
+#gameCanvas{width:100%;height:100%;display:block;touch-action:none}
+#overlay{position:absolute;inset:0;display:none;place-items:center;background:rgba(0,0,0,.62);z-index:30;color:white;text-align:center;padding:20px}
+#overlay.show{display:grid}
+.btnWhite{background:white;color:#0F172A;border:none;border-radius:999px;padding:10px 18px;font-weight:800;cursor:pointer;margin-top:12px}
+</style>
+</head>
+<body>
+<div id="app">
+<div id="top">
+<button id="back" onclick="location.href='https://pierreg78-maker.github.io/Atelier/'">Retour<br>à<br>l'accueil</button>
+<div id="title">Casse-briques Santé</div>
+</div>
+<div id="infos">
+<div class="pill" id="scorePill">SCORE <span id="score">0</span></div>
+<div class="pill vert" id="niveauPill">Niveau 1</div>
+<div class="pill sombre" id="viesPill">VIES <span id="viesDots"></span></div>
+<button class="iconBtn" id="muteBtn">🔇</button>
+<button class="pill" id="restartBtn">Recommencer</button>
+</div>
+<div id="missionBar"><b class="rouge">Mission :</b> <span id="missionText"></span></div>
+<div id="progressWrap">
+<div id="track"><div id="fill"></div></div>
+<div id="progLabels"><span id="pct">0% détruit</span><span>Objectif 90%</span></div>
+</div>
+<div id="gameWrap">
+<canvas id="gameCanvas"></canvas>
+<div id="overlay"><div><h2 id="ovTitle"></h2><p id="ovText" style="margin-top:8px"></p><button class="btnWhite" id="ovBtn">Continuer</button></div></div>
+</div>
+</div>
+<script>
+const LEVELS=[
+{ name:"Leucémie", fond:"https://raw.githubusercontent.com/pierreg78-maker/casse-briques_sante/main/images/1_fond_sain_leucemie.jpg", cible:"https://raw.githubusercontent.com/pierreg78-maker/casse-briques_sante/main/images/1_cible_leucemie.png", mission:"Leucémie. Viser les blastes (en mauve).", size:0.38, x:0.32, y:0.38, blur:2, speed:1.0 },
+{ name:"Cancer colo", fond:"https://raw.githubusercontent.com/pierreg78-maker/casse-briques_sante/main/images/2_fond_sain_cancer_colo.png", cible:"https://raw.githubusercontent.com/pierreg78-maker/casse-briques_sante/main/images/2_cible_cancer_colo.png", mission:"Cancer colo. Viser les polypes (en rouge).", size:0.32, x:0.62, y:0.34, blur:1.5, speed:1.2 },
+{ name:"Cancer prostate", fond:"https://raw.githubusercontent.com/pierreg78-maker/casse-briques_sante/main/images/3_fond_sain_cancer_prostate.png", cible:"https://raw.githubusercontent.com/pierreg78-maker/casse-briques_sante/main/images/3_cible_cancer_prostate.png", mission:"Cancer prostate. Viser la tumeur (en bleu).", size:0.26, x:0.30, y:0.44, blur:1, speed:1.4 },
+{ name:"Alzheimer", fond:"https://raw.githubusercontent.com/pierreg78-maker/casse-briques_sante/main/images/4_fond_sain_Alzheimer.png", cible:"https://raw.githubusercontent.com/pierreg78-maker/casse-briques_sante/main/images/4_cible_Alzheimer.png", mission:"Alzheimer. Viser l'amas Tau (en rouge).", size:0.20, x:0.66, y:0.40, blur:0, speed:1.65 },
+];
+const SOUNDS={
+boom:new Audio("https://raw.githubusercontent.com/pierreg78-maker/casse-briques_sante/main/sons/boom.wav"),
+oneup:new Audio("https://raw.githubusercontent.com/pierreg78-maker/casse-briques_sante/main/sons/1up.wav"),
+longer:new Audio("https://raw.githubusercontent.com/pierreg78-maker/casse-briques_sante/main/sons/longer.wav"),
+multi:new Audio("https://raw.githubusercontent.com/pierreg78-maker/casse-briques_sante/main/sons/multiball.wav"),
+pass:new Audio("https://raw.githubusercontent.com/pierreg78-maker/casse-briques_sante/main/sons/passage_niveau.wav"),
+lost:new Audio("https://raw.githubusercontent.com/pierreg78-maker/casse-briques_sante/main/sons/perdu.wav"),
+};
+Object.values(SOUNDS).forEach(a=>{a.crossOrigin="anonymous"; a.preload="auto";});
+let muted=true;
+function setMuted(m){muted=m; Object.values(SOUNDS).forEach(a=>a.muted=m); document.getElementById('muteBtn').textContent=m?'🔇':'🔊';}
+setMuted(true);
+const canvas=document.getElementById('gameCanvas');
+const ctx=canvas.getContext('2d');
+const wrap=document.getElementById('gameWrap');
+let DPR=1,W=0,H=0;
+let levelIdx=0,score=0,vies=5;
+let balls=[],paddle={x:0,w:110,h:14},gifts=[];
+let targetImg=new Image(),bgImg=new Image();
+let targetCanvas=document.createElement('canvas'),tctx=targetCanvas.getContext('2d');
+let targetW=0,targetH=0,targetX=0,targetY=0,totalPixels=1,remainingPixels=1;
+let longTimer=0,running=false,last=0,raf=0;
 
+function resizeGame(){
+ const r=wrap.getBoundingClientRect(); DPR=window.devicePixelRatio||1;
+ W=r.width; H=r.height; if(W<10||H<10) return;
+ canvas.width=W*DPR; canvas.height=H*DPR; canvas.style.width=W+'px'; canvas.style.height=H+'px';
+ ctx.setTransform(DPR,0,0,DPR,0,0);
+ if(!paddle.x) paddle.x=W/2-paddle.w/2;
+ paddle.x=Math.min(Math.max(paddle.x,0),W-paddle.w);
+}
+const ro=new ResizeObserver(()=>{clearTimeout(window._rz); window._rz=setTimeout(resizeGame,120);});
+ro.observe(wrap);
+window.addEventListener('resize',()=>{clearTimeout(window._rz); window._rz=setTimeout(resizeGame,120);});
+if(window.visualViewport) window.visualViewport.addEventListener('resize',()=>{clearTimeout(window._rz); window._rz=setTimeout(resizeGame,120);});
+window.addEventListener('orientationchange',()=>setTimeout(resizeGame,300));
+
+function updateVies(){ const c=document.getElementById('viesDots'); c.innerHTML=''; for(let i=0;i<5;i++){const d=document.createElement('div'); d.className='dot'+(i<vies?'':' off'); c.appendChild(d);} }
+
+function loadLevel(idx){
+ levelIdx=idx; const L=LEVELS[idx];
+ document.getElementById('niveauPill').textContent='Niveau '+(idx+1);
+ document.getElementById('missionText').textContent=L.mission;
+ document.getElementById('fill').style.width='0%'; document.getElementById('pct').textContent='0% détruit';
+ bgImg.crossOrigin="anonymous"; bgImg.src=L.fond;
+ targetImg.crossOrigin="anonymous"; targetImg.src=L.cible;
+ targetImg.onload=()=>{
+  const tw=W*L.size; const sc=tw/targetImg.width;
+  targetW=tw; targetH=targetImg.height*sc;
+  targetX=W*L.x-targetW/2; targetY=H*L.y-targetH/2;
+  targetCanvas.width=targetW; targetCanvas.height=targetH;
+  tctx.clearRect(0,0,targetW,targetH); tctx.drawImage(targetImg,0,0,targetW,targetH);
+  const data=tctx.getImageData(0,0,targetW,targetH).data; let cnt=0; for(let i=3;i<data.length;i+=4) if(data[i]>20) cnt++;
+  totalPixels=cnt||1; remainingPixels=totalPixels;
+  resetBalls();
+ };
+ resetBalls(); gifts=[]; longTimer=0;
+ if(!running){running=true; last=performance.now(); requestAnimationFrame(loop);}
+}
+function resetBalls(){ balls=[{x:W/2,y:H-50,vx:(Math.random()>0.5?1:-1)*4*LEVELS[levelIdx].speed,vy:-4*LEVELS[levelIdx].speed}]; paddle.w=110; }
+function play(s){ if(!muted){ try{SOUNDS[s].currentTime=0; SOUNDS[s].play();}catch(e){} } }
+
+function loop(t){
+ raf=requestAnimationFrame(loop); const dt=Math.min((t-last)/16.6,2); last=t; if(!running) return;
+ if(bgImg.complete&&bgImg.naturalWidth){ ctx.save(); ctx.filter=`blur(${LEVELS[levelIdx].blur}px)`; ctx.drawImage(bgImg,0,0,W,H); ctx.restore(); } else { ctx.fillStyle='#0F172A'; ctx.fillRect(0,0,W,H); }
+ ctx.drawImage(targetCanvas,targetX,targetY);
+ ctx.fillStyle='white'; ctx.beginPath(); ctx.roundRect(paddle.x,H-22,paddle.w,paddle.h,7); ctx.fill();
+ for(let b of balls){
+  b.x+=b.vx*dt; b.y+=b.vy*dt;
+  if(b.x<9||b.x>W-9){b.vx*=-1; b.x=Math.max(9,Math.min(W-9,b.x));}
+  if(b.y<9){b.vy*=-1; b.y=9;}
+  if(b.y>H-22-paddle.h && b.y<H-12 && b.x>paddle.x && b.x<paddle.x+paddle.w && b.vy>0){
+   const hit=(b.x-(paddle.x+paddle.w/2))/(paddle.w/2); b.vx=hit*5; b.vy=-Math.abs(b.vy); play('boom');
+  }
+  const lx=Math.floor(b.x-targetX), ly=Math.floor(b.y-targetY);
+  if(lx>=0&&lx<targetW&&ly>=0&&ly<targetH){
+   const a=tctx.getImageData(lx,ly,1,1).data[3];
+   if(a>20){
+    tctx.globalCompositeOperation='destination-out'; tctx.beginPath(); tctx.arc(lx,ly,24,0,Math.PI*2); tctx.fill(); tctx.globalCompositeOperation='source-over';
+    remainingPixels-=150; if(remainingPixels<0) remainingPixels=0;
+    const pct= (1-remainingPixels/totalPixels)*100;
+    document.getElementById('fill').style.width=Math.min(pct,100)+'%';
+    document.getElementById('pct').textContent=Math.floor(pct)+'% détruit';
+    score+=10; document.getElementById('score').textContent=score; play('boom');
+    if(Math.random()<0.2){ const ty=['life','long','multi'][Math.floor(Math.random()*3)]; gifts.push({x:b.x,y:b.y,type:ty,vy:2.2}); }
+    b.vy*=-1;
+    if(pct>=90){ winLevel(); return; }
+   }
+  }
+  if(b.y>H+30){ const i=balls.indexOf(b); if(i>=0) balls.splice(i,1); if(balls.length===0){ vies--; updateVies(); play('lost'); if(vies<=0){ gameOver(); return;} else resetBalls(); } }
+ }
+ for(let b of balls){ ctx.fillStyle='#2ECC71'; ctx.beginPath(); ctx.arc(b.x,b.y,9,0,Math.PI*2); ctx.fill(); }
+ for(let i=gifts.length-1;i>=0;i--){
+  const g=gifts[i]; g.y+=g.vy*dt; ctx.font='20px serif'; ctx.fillText(g.type==='life'?'❤️':g.type==='long'?'🟩':'🔵',g.x-10,g.y);
+  if(g.y>H-22 && g.x>paddle.x && g.x<paddle.x+paddle.w){
+   if(g.type==='life'){vies=Math.min(5,vies+1); updateVies(); play('oneup');}
+   if(g.type==='long'){paddle.w=180; longTimer=12*60; play('longer');}
+   if(g.type==='multi'){balls.push({x:paddle.x+paddle.w/2,y:H-40,vx:3.5,vy:-3.5},{x:paddle.x+paddle.w/2,y:H-40,vx:-3.5,vy:-3.5}); play('multi');}
+   gifts.splice(i,1);
+  } else if(g.y>H+40) gifts.splice(i,1);
+ }
+ if(longTimer>0){ longTimer-=dt; if(longTimer<=0) paddle.w=110; }
+}
+function showOverlay(t,txt,cb){ document.getElementById('ovTitle').textContent=t; document.getElementById('ovText').textContent=txt; document.getElementById('overlay').classList.add('show'); document.getElementById('ovBtn').onclick=cb; }
+function hideOverlay(){ document.getElementById('overlay').classList.remove('show'); }
+function winLevel(){
+ running=false; play('pass');
+ if(levelIdx<LEVELS.length-1){
+  showOverlay(`Niveau ${levelIdx+1} nettoyé!`,`On passe au niveau ${levelIdx+2} - ${LEVELS[levelIdx+1].name}`,()=>{ hideOverlay(); loadLevel(levelIdx+1); running=true; last=performance.now(); requestAnimationFrame(loop); });
+ } else {
+  showOverlay(`Bravo, collection terminée!`,`Tu as guéri les 4 maladies! Score final: ${score}`,()=>{ hideOverlay(); levelIdx=0; score=0; vies=5; document.getElementById('score').textContent=0; updateVies(); loadLevel(0); running=true; last=performance.now(); requestAnimationFrame(loop); });
+ }
+}
+function gameOver(){ running=false; showOverlay(`Perdu`,`Plus de vies!`,()=>{ hideOverlay(); vies=5; score=0; document.getElementById('score').textContent=0; updateVies(); loadLevel(levelIdx); running=true; last=performance.now(); requestAnimationFrame(loop); }); }
+function handleMove(cx){ const r=canvas.getBoundingClientRect(); const x=cx-r.left; paddle.x=x-paddle.w/2; paddle.x=Math.max(0,Math.min(W-paddle.w,paddle.x)); }
+canvas.addEventListener('touchmove',e=>{e.preventDefault(); handleMove(e.touches[0].clientX);},{passive:false});
+canvas.addEventListener('touchstart',e=>{handleMove(e.touches[0].clientX);},{passive:false});
+canvas.addEventListener('mousemove',e=>{ if(e.buttons) handleMove(e.clientX); });
+canvas.addEventListener('mousedown',e=>handleMove(e.clientX));
+document.getElementById('muteBtn').onclick=()=>setMuted(!muted);
+document.getElementById('restartBtn').onclick=()=>{ vies=5; score=0; document.getElementById('score').textContent=0; updateVies(); loadLevel(levelIdx); };
+updateVies(); resizeGame(); loadLevel(0);
+</script>
+</body>
+</html>
