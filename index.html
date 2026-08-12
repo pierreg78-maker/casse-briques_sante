@@ -44,6 +44,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:'Outfit',
 .btnPrimary:active{transform:scale(.97)}
 #comboDisplay{position:absolute;top:10px;right:12px;font-size:16px;font-weight:900;color:#FBBF24;opacity:0;transition:opacity .15s;pointer-events:none;text-shadow:0 0 10px rgba(251,191,36,.5)}
 #comboDisplay.show{opacity:1}
+#vacationScreen{position:absolute;inset:0;display:none;z-index:40;background:#000}
+#vacationScreen.show{display:block}
+#vacationImg{width:100%;height:100%;object-fit:cover;cursor:pointer;display:block}
 </style>
 </head>
 <body>
@@ -57,7 +60,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:'Outfit',
     <div class="pill accent" id="niveauPill">Niveau 1</div>
     <div class="pill" id="viesPill">VIES <span id="viesDots"></span></div>
     <button class="iconBtn" id="muteBtn" aria-label="Son on/off">🔇</button>
-    <div class="pill clickable" id="restartBtn">Recommencer</div>
+    <div class="pill clickable" id="pauseBtn">⏸ Pause</div>
   </div>
   <div id="missionBar">
     <span class="label">Mission</span>
@@ -76,6 +79,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:'Outfit',
         <p id="ovText"></p>
         <button class="btnPrimary" id="ovBtn">Continuer</button>
       </div>
+    </div>
+    <div id="vacationScreen">
+      <img id="vacationImg" alt="Prendre des vacances"/>
     </div>
   </div>
 </div>
@@ -100,6 +106,9 @@ const SOUNDS={
   applause:new Audio("https://raw.githubusercontent.com/pierreg78-maker/casse-briques_sante/main/sons/applause.wav"),
 };
 Object.values(SOUNDS).forEach(a=>{a.crossOrigin="anonymous";a.preload="auto";});
+const VACATION_IMG="https://raw.githubusercontent.com/pierreg78-maker/casse-briques_sante/main/images/vacances2.png";
+const VACATION_SOUND=new Audio("https://raw.githubusercontent.com/pierreg78-maker/casse-briques_sante/main/sons/vacances_son.mp3");
+VACATION_SOUND.crossOrigin="anonymous";VACATION_SOUND.preload="auto";
 let muted=true;
 function setMuted(m){muted=m;Object.values(SOUNDS).forEach(a=>a.muted=m);document.getElementById('muteBtn').textContent=m?'🔇':'🔊';}
 setMuted(true);
@@ -119,7 +128,7 @@ let targetImg=new Image(),bgImg=new Image();
 let targetCanvas=document.createElement('canvas'),tctx=targetCanvas.getContext('2d');
 let targetW=0,targetH=0,targetX=0,targetY=0;
 let totalPixels=1,remainingPixels=1;
-let longTimer=0,running=false,last=0;
+let longTimer=0,running=false,last=0,isPaused=false;
 
 /* ===== EFFETS VISUELS ===== */
 let particles=[],impacts=[],floatingTexts=[];
@@ -173,6 +182,8 @@ function updateProgress(){
 /* ===== CHARGEMENT NIVEAU ===== */
 function loadLevel(idx){
   levelIdx=idx;
+  isPaused=false;
+  document.getElementById('pauseBtn').textContent='⏸ Pause';
   const L=LEVELS[idx];
   document.getElementById('niveauPill').textContent='Niveau '+(idx+1);
   document.getElementById('missionText').textContent=L.mission;
@@ -501,13 +512,30 @@ function loop(t){
 }
 
 /* ===== OVERLAYS ===== */
-function showOverlay(t,txt,cb){
+function showOverlay(t,txt,cb,btnLabel){
   document.getElementById('ovTitle').textContent=t;
   document.getElementById('ovText').textContent=txt;
   document.getElementById('overlay').classList.add('show');
+  document.getElementById('ovBtn').textContent=btnLabel||'Continuer';
   document.getElementById('ovBtn').onclick=cb;
 }
 function hideOverlay(){document.getElementById('overlay').classList.remove('show');}
+
+function showVacation(){
+  hideOverlay();
+  document.getElementById('vacationImg').src=VACATION_IMG;
+  document.getElementById('vacationScreen').classList.add('show');
+  if(!muted){try{VACATION_SOUND.currentTime=0;VACATION_SOUND.play();}catch(e){}}
+}
+function hideVacation(){
+  document.getElementById('vacationScreen').classList.remove('show');
+  try{VACATION_SOUND.pause();}catch(e){}
+}
+document.getElementById('vacationImg').addEventListener('click',()=>{
+  hideVacation();
+  levelIdx=0;score=0;vies=5;document.getElementById('score').textContent=0;updateVies();
+  loadLevel(0);running=true;last=performance.now();
+});
 
 function winLevel(){
   running=false;play('pass');
@@ -516,18 +544,20 @@ function winLevel(){
       ()=>{hideOverlay();loadLevel(levelIdx+1);running=true;last=performance.now();});
   }else{
     play('applause');
-    showOverlay('Bravo, collection termin\u00e9e !','Tu as gu\u00e9ri les 4 maladies ! Score final : '+score,
-      ()=>{hideOverlay();levelIdx=0;score=0;vies=5;document.getElementById('score').textContent=0;updateVies();loadLevel(0);running=true;last=performance.now();});
+    showOverlay('Bravo, tu as pulv\u00e9ris\u00e9 4 maladies aujourd\'hui !','Score final : '+score,
+      showVacation,'Prendre des vacances');
   }
 }
 function gameOver(){
   running=false;
   showOverlay('Perdu','Plus de vies ! Score : '+score,
-    ()=>{hideOverlay();vies=5;score=0;document.getElementById('score').textContent=0;updateVies();loadLevel(levelIdx);running=true;last=performance.now();});
+    ()=>{hideOverlay();levelIdx=0;score=0;vies=5;document.getElementById('score').textContent=0;updateVies();loadLevel(0);running=true;last=performance.now();},
+    'Recommencer');
 }
 
 /* ===== CONTRÔLES ===== */
 function handleMove(cx){
+  if(isPaused)return;
   const r=canvas.getBoundingClientRect();
   paddle.x=cx-r.left-paddle.w/2;
   paddle.x=Math.max(0,Math.min(W-paddle.w,paddle.x));
@@ -537,7 +567,12 @@ canvas.addEventListener('touchstart',e=>{e.preventDefault();handleMove(e.touches
 canvas.addEventListener('mousemove',e=>handleMove(e.clientX));
 canvas.addEventListener('mousedown',e=>handleMove(e.clientX));
 document.getElementById('muteBtn').onclick=()=>setMuted(!muted);
-document.getElementById('restartBtn').onclick=()=>{vies=5;score=0;document.getElementById('score').textContent=0;updateVies();loadLevel(levelIdx);running=true;last=performance.now();};
+document.getElementById('pauseBtn').onclick=function(){
+  if(document.getElementById('overlay').classList.contains('show')||document.getElementById('vacationScreen').classList.contains('show'))return;
+  isPaused=!isPaused;
+  if(isPaused){running=false;this.textContent='\u25B6 Reprendre';}
+  else{running=true;last=performance.now();this.textContent='\u23F8 Pause';}
+};
 
 /* ===== DÉMARRAGE ===== */
 updateVies();
